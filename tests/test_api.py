@@ -1,6 +1,6 @@
-from fakes import ScriptedLLM, label
 from fastapi.testclient import TestClient
 
+from fakes import ScriptedLLM, label
 from triage.api import create_app
 
 TOKEN = "test-token"

@@ -1,5 +1,4 @@
 from fakes import ScriptedLLM, label
-
 from triage.pipeline import Pipeline
 
 TICKET = {"ticket_id": "T-1", "channel": "email",

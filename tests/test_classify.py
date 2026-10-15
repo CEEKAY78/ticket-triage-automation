@@ -1,8 +1,8 @@
 import json
 
 import pytest
-from fakes import ScriptedLLM, label
 
+from fakes import ScriptedLLM, label
 from triage.classify import LLMUnavailableError, classify, route
 
 TICKET = ("My wardrobe from order TY-2048813 arrived with a broken door. "
