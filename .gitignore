@@ -1,0 +1,12 @@
+venv/
+_local/
+n8n-runtime/
+.n8n/
+data/*.sqlite3
+*.sqlite3-journal
+__pycache__/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.env
+eval/runs/_*.txt
