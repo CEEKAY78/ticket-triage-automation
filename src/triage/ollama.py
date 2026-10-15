@@ -10,7 +10,7 @@ OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
 
 
 class OllamaChat:
-    def __init__(self, model: str, timeout_s: float = 120.0):
+    def __init__(self, model: str, timeout_s: float = 300.0):
         self.model = model
         self.timeout_s = timeout_s
 

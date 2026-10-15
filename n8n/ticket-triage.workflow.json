@@ -1,0 +1,185 @@
+{
+  "name": "Ticket triage",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ticket",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0001-4000-8000-000000000001",
+      "name": "New ticket (webhook)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 300],
+      "webhookId": "5d0c4b9e-7a51-4c4e-9b0e-3f7a2a0c1e01"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.TRIAGE_URL || 'http://127.0.0.1:8000' }}/tickets",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "X-Webhook-Token", "value": "={{ $env.TRIAGE_TOKEN }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ ticket_id: $json.body.ticket_id, channel: $json.body.channel || 'email', text: $json.body.text }) }}",
+        "options": { "timeout": 180000 }
+      },
+      "id": "a1b2c3d4-0002-4000-8000-000000000002",
+      "name": "Classify and route (triage API)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [260, 300],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "typeValidation": "strict", "version": 2 },
+                "conditions": [
+                  { "leftValue": "={{ $json.status }}", "rightValue": "routed",
+                    "operator": { "type": "string", "operation": "equals" } }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "routed"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "typeValidation": "strict", "version": 2 },
+                "conditions": [
+                  { "leftValue": "={{ $json.status }}", "rightValue": "review",
+                    "operator": { "type": "string", "operation": "equals" } }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "review"
+            }
+          ]
+        },
+        "options": { "fallbackOutput": "extra", "renameFallbackOutput": "dead_letter" }
+      },
+      "id": "a1b2c3d4-0003-4000-8000-000000000003",
+      "name": "By status",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [520, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { status: $json.status, team: $json.team, sla_hours: $json.sla_hours, category: $json.category, message: 'Routed to ' + $json.team + ' (SLA ' + $json.sla_hours + ' h)' } }}",
+        "options": { "responseCode": 200 }
+      },
+      "id": "a1b2c3d4-0004-4000-8000-000000000004",
+      "name": "Reply: routed",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [800, 60]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { status: 'review', reason: $json.review_reason, message: 'Queued for a human agent' } }}",
+        "options": { "responseCode": 202 }
+      },
+      "id": "a1b2c3d4-0005-4000-8000-000000000005",
+      "name": "Reply: human review",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [800, 220]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { status: 'dead_letter', message: 'Accepted, will be retried automatically' } }}",
+        "options": { "responseCode": 202 }
+      },
+      "id": "a1b2c3d4-0006-4000-8000-000000000006",
+      "name": "Reply: parked for retry",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [800, 380]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { status: 'error', message: 'Triage service unreachable after 3 tries', error: $json.error?.message } }}",
+        "options": { "responseCode": 503 }
+      },
+      "id": "a1b2c3d4-0007-4000-8000-000000000007",
+      "name": "Reply: service down",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [520, 480]
+    },
+    {
+      "parameters": {
+        "rule": { "interval": [ { "field": "minutes", "minutesInterval": 15 } ] }
+      },
+      "id": "a1b2c3d4-0008-4000-8000-000000000008",
+      "name": "Every 15 min",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 680]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.TRIAGE_URL || 'http://127.0.0.1:8000' }}/dead-letters/retry",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "X-Webhook-Token", "value": "={{ $env.TRIAGE_TOKEN }}" }
+          ]
+        },
+        "options": { "timeout": 600000 }
+      },
+      "id": "a1b2c3d4-0009-4000-8000-000000000009",
+      "name": "Retry parked tickets",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [260, 680],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 5000
+    }
+  ],
+  "connections": {
+    "New ticket (webhook)": {
+      "main": [[{ "node": "Classify and route (triage API)", "type": "main", "index": 0 }]]
+    },
+    "Classify and route (triage API)": {
+      "main": [
+        [{ "node": "By status", "type": "main", "index": 0 }],
+        [{ "node": "Reply: service down", "type": "main", "index": 0 }]
+      ]
+    },
+    "By status": {
+      "main": [
+        [{ "node": "Reply: routed", "type": "main", "index": 0 }],
+        [{ "node": "Reply: human review", "type": "main", "index": 0 }],
+        [{ "node": "Reply: parked for retry", "type": "main", "index": 0 }]
+      ]
+    },
+    "Every 15 min": {
+      "main": [[{ "node": "Retry parked tickets", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "active": false,
+  "pinData": {}
+}
